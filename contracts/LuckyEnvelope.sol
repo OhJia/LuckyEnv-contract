@@ -6,8 +6,8 @@ contract LuckyEnvelope {
   	// config
   	// ------------------------------
   	uint private default_dev_tip_pct = 1;
-  	uint private min_since_last_claim = 1; // min change later
-  	uint private min_wei = 1000000000000000000 * 0.005; 
+  	uint private min_since_last_claim = 6; // minutes
+  	uint private min_wei = 1000000000000000000 * 0.006; 
   	uint private max_wei = 1000000000000000000 * 100; 
 
 	// ------------------------------
@@ -43,7 +43,7 @@ contract LuckyEnvelope {
 
 	function LuckyEnvelope() public {
 		envelopeIndex = 0;
-		devAddress = 0xc8811e053344c18be7f05c80ad5a2fa2f4ae190c;
+		devAddress = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a;
 	}
 
 	// ------------------------------
@@ -145,7 +145,6 @@ contract LuckyEnvelope {
 	}
 	
 	// claim envelope 
-	// TODO: add requireHashMatch(_id, _random)
 	function claimEnvelope(uint _id, string _random) public 
 	requireHashMatch(_id, _random)
 	notExpired(_id)
@@ -201,6 +200,9 @@ contract LuckyEnvelope {
 	requireHashMatch(_id, _random)
 	returns (string, string, uint, uint, uint) {	
 		uint nextClaimTime = envelopes[_id].lastClaimTime + min_since_last_claim * 60;
+		if (envelopes[_id].lastClaimTime == 0) {
+			nextClaimTime = envelopes[_id].startTime;
+		}
 		return (envelopes[_id].creatorName, envelopes[_id].messageLink, envelopes[_id].endTime, envelopes[_id].totalClaims, nextClaimTime);			
 	}
 
