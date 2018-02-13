@@ -200,9 +200,6 @@ contract LuckyEnvelope {
 	requireHashMatch(_id, _random)
 	returns (string, string, uint, uint, uint) {	
 		uint nextClaimTime = envelopes[_id].lastClaimTime + min_since_last_claim * 60;
-		if (envelopes[_id].lastClaimTime == 0) {
-			nextClaimTime = envelopes[_id].startTime;
-		}
 		return (envelopes[_id].creatorName, envelopes[_id].messageLink, envelopes[_id].endTime, envelopes[_id].totalClaims, nextClaimTime);			
 	}
 
