@@ -1,4 +1,5 @@
 build
 node_modules
 yarn-error.log
-contract-abi-address.txt
+contract-v-address.txt
+contract-interface.txt

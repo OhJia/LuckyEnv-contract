@@ -6,7 +6,7 @@ contract LuckyEnvelope {
   	// config
   	// ------------------------------
   	uint private default_dev_tip_pct = 1;
-  	uint private default_refund_pct = 1;
+  	uint private default_refund_pct = 2;
   	uint private min_since_last_claim = 360; // seconds (6 mins)
   	uint private min_wei = 6000000000000000; // 0.006 eth 
   	uint private max_wei = 100000000000000000000; // 100 eth
@@ -208,13 +208,13 @@ contract LuckyEnvelope {
 	// ------------------------------
   	// getters
   	// ------------------------------
-	function getEnvelopeStatus(uint _id) public view returns (EnvelopeStatus, bool, address) {
-		return (envelopes[_id].status, envelopes[_id].passEnable, envelopes[_id].creatorAddr);
+	function getEnvelopeStatus(uint _id) public view returns (EnvelopeStatus, bool, address, uint) {
+		return (envelopes[_id].status, envelopes[_id].passEnable, envelopes[_id].creatorAddr, envelopes[_id].endTime);
 	}
 
-	function getEnvelopeInfo(uint _id) public view returns (string, string, uint, uint, uint) {
+	function getEnvelopeInfo(uint _id) public view returns (string, string, uint, uint) {
 		uint nextClaimTime = envelopes[_id].lastClaimTime + min_since_last_claim;
-		return (envelopes[_id].creatorName, envelopes[_id].messageLink, envelopes[_id].endTime, envelopes[_id].totalClaims, nextClaimTime);
+		return (envelopes[_id].creatorName, envelopes[_id].messageLink, envelopes[_id].totalClaims, nextClaimTime);
 	}
 
 	function getEnvelopeReveal(uint _id) public view 
