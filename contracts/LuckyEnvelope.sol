@@ -5,52 +5,60 @@ contract LuckyEnvelope {
 	// ------------------------------
   	// config
   	// ------------------------------
-  	uint private default_dev_tip_pct = 1;
-  	uint private min_since_last_claim = 6; // minutes
-  	uint private min_wei = 1000000000000000000 * 0.006; 
-  	uint private max_wei = 1000000000000000000 * 100; 
+  	uint private default_dev_tip_pct = 0.01;
+  	uint private default_refund_pct = 0.01;
+  	uint private min_since_last_claim = 360; // seconds (6 mins)
+  	uint private min_wei = 6000000000000000; // 0.006 eth 
+  	uint private max_wei = 100000000000000000000; // 100 eth
 
 	// ------------------------------
   	// object struct & mappings
   	// ------------------------------
+  	enum EnvelopeStatus { Created, Claimed, Empty }
 
 	struct Envelope {
 		uint id;
+		bool passEnable;
+		EnvelopeStatus status;
 		bytes32 hash;
-		address creatorAddress;
+		address tempAddr;
+		address creatorAddr;
 		string creatorName;
-		uint startTime;
 		uint endTime;
 		uint initialBalance;
 		uint remainingBalance;
+		uint feeAmount;
 		string messageLink;
-		uint devTipPct;
 		uint maxClaims;
 		uint totalClaims;
 		uint lastClaimTime;
-		bool reveal;
 		mapping (address => uint) claims;
 	}
 
 	mapping (uint => Envelope) private envelopes;
-	mapping (string => address) private creators;
+	mapping (address => uint) pendingWithdrawals; // withdraw pattern
 
 	// ------------------------------
   	// constructor 
   	// ------------------------------
   	uint public envelopeIndex;
-  	address public devAddress;
+  	address public devAddr;
 
-	function LuckyEnvelope() public {
+	function LuckyEnvelope(address _devAddr) public {
 		envelopeIndex = 0;
-		devAddress = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a;
+		devAddr = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a;
 	}
 
 	// ------------------------------
   	// modifiers
   	// ------------------------------
-  	modifier notExpired(uint _id) {
-		require (envelopes[_id].endTime > now);
+  	modifier notEnded(uint _id) {
+		require (envelopes[_id].endTime > now && envelopes[_id].remainingBalance > 0);
+		_;
+	}
+
+	modifier notEmpty(uint _id) {
+		require (envelopes[_id].status != EnvelopeStatus.Empty);
 		_;
 	}
 
@@ -59,26 +67,17 @@ contract LuckyEnvelope {
 		_;
 	}
 
-	modifier notCreator(uint _id) {
-		require (envelopes[_id].creatorAddress != msg.sender);
+	modifier requireClaimerNotClaimed(uint _id, address _claimerAddr) {
+		require (envelopes[_id].claims[_claimerAddr] == 0);
 		_;
 	}
 
-	modifier requireSenderNotClaimed(uint _id) {
-		require (envelopes[_id].claims[msg.sender] == 0);
+	modifier requireTempAddrMatch(uint _id, address _newTempAddr) {
+		require (envelopes[_id].tempAddr == _newTempAddr && envelopes[_id].tempAddr == msg.sender);
 		_;
 	}
 
-	modifier requireIdMatch(uint _id) {
-		require (_id <= envelopeIndex);
-		_;
-	}
-
-	modifier requireHashMatch(uint _id, string _random) {
-		require (envelopes[_id].hash == keccak256(_id, creators[_random], _random));
-		_;
-	}
-
+	// TODO: update last claim check with last block number
 	modifier requireMinSinceLastClaim(uint _id) {
 		if (envelopes[_id].lastClaimTime > 0) {
 			require (now - envelopes[_id].lastClaimTime >= min_since_last_claim * 60);
@@ -86,139 +85,152 @@ contract LuckyEnvelope {
 		_;
 	}
 
-	modifier isActive(uint _id) {
-		require (envelopes[_id].remainingBalance > 0);
-		_;
-	}
-
-	modifier isRevealed(uint _id) {
-		require (msg.sender == envelopes[_id].creatorAddress || envelopes[_id].endTime <= now || envelopes[_id].remainingBalance == 0);
-		_;
-	}
-
 	// ------------------------------
   	// events
   	// ------------------------------
-	event EnvelopeCreated(uint _id, address indexed _from);
-	event EnvelopeClaimed(uint indexed _id, address indexed _from, uint _value);
-	event EnvelopeExpired(address indexed _from, uint _id, uint _value);
+	event EnvelopeCreated(uint _id, address indexed _from, address _temp);
+	event EnvelopeClaimChecked(uint indexed _id, address indexed _from, uint _value);
+	event EnvelopeRefunded(address indexed _from, uint _id, uint _value);
+	event withdrewPending(string _type, uint _id, address _from, uint _value);
 
-	
-	// fallback function
+	// ------------------------------
+  	// main functions
+  	// ------------------------------
+	// fallback 
 	function() public payable {
 		revert();
 	}
 
 	// create new envelope
-	function newEnvelope(string _random, string _name, uint _endTime, string _messageLink, uint _maxClaims, bool _devTip) payable public {
+	function newEnvelope(bool _passEnable, string _password, address _tempAddr, string _name, uint _endTime, string _messageLink, uint _maxClaims, uint _feeAmount, bool _devTip) payable public {
 
 		require (msg.value >= min_wei);
 		require (msg.value <= max_wei);
 		require (now < _endTime);
 		require (_maxClaims >= 1);
+		require (_tempAddr != 0x0);
 
 		envelopeIndex += 1;
+		uint amount = msg.value;
+		uint tipAmount = 0;
 		
 		Envelope memory env;
 		env.id = envelopeIndex;
-		env.hash = keccak256(envelopeIndex, msg.sender, _random);
-		env.devTipPct = 0;
-		if (_devTip) {
-			env.devTipPct = default_dev_tip_pct;
+		env.passEnable = _passEnable;
+		if (env.passEnable) {
+			env.hash = keccak256(envelopeIndex, msg.sender, _password);
 		}
-		env.creatorAddress = msg.sender;
+		env.tempAddr = _tempAddr;
+		if (_devTip) {
+			tipAmount = (amount * default_dev_tip_pct);
+			amount -= tipAmount;
+		}
+		env.creatorAddr = msg.sender;
 		env.creatorName = _name;
-		env.startTime = now;
 		env.endTime = _endTime;
-		env.initialBalance = msg.value;
-		env.remainingBalance = msg.value;
+		env.initialBalance = amount - _feeAmount;
+		env.remainingBalance = env.initialBalance;
+		env.feeAmount = _feeAmount;
 		env.messageLink = _messageLink;
 		env.maxClaims = _maxClaims;
-		env.totalClaims = 0;
-		env.lastClaimTime = 0;
-		env.reveal = false;
-
+		env.status = EnvelopeStatus.Created;
 		envelopes[envelopeIndex] = env;
-		creators[_random] = msg.sender;
+		pendingWithdrawals[_tempAddr] += _feeAmount;
+		devAddr.transfer(tipAmount);
 
-		EnvelopeCreated(envelopeIndex, msg.sender);
+		EnvelopeCreated(envelopeIndex, msg.sender, _tempAddr);
 	}
+
+	// withdraw: transfer transaction fee to temp addr 
+	function withdrawPendingFee(uint _id, address _address) public {
+        uint amount = pendingWithdrawals[_address];
+        pendingWithdrawals[_address] = 0;
+        withdrawAddr.transfer(amount);
+        withdrewPending("WITHDREW_FEE", _id, _address, amount);
+    }
 	
-	// claim envelope 
-	function claimEnvelope(uint _id, string _random) public 
-	requireHashMatch(_id, _random)
-	notExpired(_id)
-	isActive(_id)
-	notCreator(_id)	
-	requireSenderNotClaimed(_id)
+	// check and update envelope based on claim 
+	function checkClaim(uint _id, _newTempAddr, address _claimerAddr, string _password) public 
+	requireTempAddrMatch(_id, _newTempAddr)
+	notEnded(_id)
+	requireClaimerNotClaimed(_id, _claimerAddr)
 	requireMinSinceLastClaim(_id)
-	{		
+	{
+		if (envelopes[_id].passEnable) {
+			require (checkPassword(_id, _password));
+		}		
 		uint claimAmount = envelopes[_id].remainingBalance;
 		if (envelopes[_id].maxClaims - envelopes[_id].totalClaims > 1) {
 			claimAmount = generateClaimAmount(envelopes[_id].remainingBalance, envelopes[_id].maxClaims);
 		} 
-
-		distributeFunds(claimAmount, envelopes[_id].devTipPct, msg.sender);
-
-		EnvelopeClaimed(_id, msg.sender, claimAmount);
-
 		envelopes[_id].totalClaims += 1;
-		envelopes[_id].claims[msg.sender] = claimAmount;
+		envelopes[_id].claims[_claimerAddr] = claimAmount;
 		envelopes[_id].lastClaimTime = now;
-		envelopes[_id].remainingBalance -= claimAmount;				
+		envelopes[_id].remainingBalance -= claimAmount;
+		envelopes[_id].status = EnvelopeStatus.Claimed;
+		if (envelopes[_id].remainingBalance == 0) {
+			envelopes[_id].status = EnvelopeStatus.Empty;
+		}	
+		pendingWithdrawals[_claimerAddr] += claimAmount;
+
+		EnvelopeClaimChecked(_id, _claimerAddr, claimAmount);		
 	}
 
-	// expire envelope
-	function expireEnvelope(uint _id) public 
-	isActive(_id)
+	// claimer addr withdraw claim amount
+	function withdrawPendingClaim(uint _id, address _claimAddr) public {
+        uint amount = pendingWithdrawals[_claimAddr];
+        pendingWithdrawals[_claimAddr] = 0;
+        withdrawAddr.transfer(amount);
+        withdrewPending("WITHDREW_CLAIM", _id, _claimAddr, amount);
+    }
+
+	// refund envelope when expired
+	function refundEnvelope(uint _id) public 
 	expired(_id)
+	notEmpty(_id)
 	{
-		distributeFunds(envelopes[_id].remainingBalance, 0, envelopes[_id].creatorAddress);
-		EnvelopeExpired(envelopes[_id].creatorAddress, _id, envelopes[_id].remainingBalance);
+		uint refundFee = envelopes[_id].remainingBalance * default_refund_pct;
+		uint refundAmount = envelopes[_id].remainingBalance - refundFee;
 		envelopes[_id].remainingBalance = 0;
+		envelopes[_id].status = EnvelopeStatus.Empty;
+		envelopes[_id].creatorAddr.transfer(refundAmount);
+		devAddr.transfer(refundFee);
+		EnvelopeRefunded(_id, envelopes[_id].creatorAddr, refundAmount);		
 	}
 
-	// send funds
-	function distributeFunds(uint _amount, uint _devPct, address _address) private {
-		if (_devPct > 0 ){
-	      uint devAmount = (_amount * _devPct / 100);
-	      devAddress.transfer(devAmount);
-	    }
-	    uint amount = (_amount * (100 - _devPct) / 100);
-	    _address.transfer(amount);
+	// check password 
+	function checkPassword(uint _id, string _password) public returns (bool) {
+		if (envelopes[_id].hash == keccak256(envelopeIndex, envelopes[_id].creatorAddr, _password)) {
+			return true;
+		} 
+		return false;
 	}
 
-	// getters
-	function getEnvelopeInfo(uint _id) public view 
-	requireIdMatch(_id)
-	returns (string, uint, uint, uint, bool) {
-		bool remaining = (envelopes[_id].remainingBalance > 0);
-		return (envelopes[_id].creatorName, envelopes[_id].startTime, envelopes[_id].endTime, envelopes[_id].totalClaims, remaining);
+	// ------------------------------
+  	// getters
+  	// ------------------------------
+	function getEnvelopeStatus(uint _id) public view returns (EnvelopeStatus, bool, address) {
+		return (envelopes[_id].status, envelopes[_id].passEnable, envelopes[_id].creatorAddr);
 	}
 
-	function getEnvelopeDetails(uint _id, string _random) public view 
-	requireHashMatch(_id, _random)
-	returns (string, string, uint, uint, uint) {	
-		uint nextClaimTime = envelopes[_id].lastClaimTime + min_since_last_claim * 60;
-		return (envelopes[_id].creatorName, envelopes[_id].messageLink, envelopes[_id].endTime, envelopes[_id].totalClaims, nextClaimTime);			
+	function getEnvelopeInfo(uint _id) public view returns (string, string, uint, uint, uint) {
+		uint nextClaimTime = envelopes[_id].lastClaimTime + min_since_last_claim;
+		return (envelopes[_id].creatorName, envelopes[_id].messageLink, envelopes[_id].endTime, envelopes[_id].totalClaims, nextClaimTime);
 	}
 
-	function getEnvelopeReveal(uint _id, string _random) public view 
-	requireHashMatch(_id, _random)
-	isRevealed(_id)
-	returns (address, uint, uint, uint) {
-		return (envelopes[_id].creatorAddress, envelopes[_id].initialBalance, envelopes[_id].remainingBalance, envelopes[_id].maxClaims);
+	function getEnvelopeReveal(uint _id) public view 
+	returns (uint, uint, uint) {
+		return (envelopes[_id].maxClaims, envelopes[_id].initialBalance, envelopes[_id].remainingBalance);
 	}
 
 	function getClaimInfo(uint _id, address _claimer) public view 
-	requireIdMatch(_id)
 	returns (uint) {
 		return envelopes[_id].claims[_claimer];
 	}
 
 	// helper
 	function generateClaimAmount(uint _remainingBalance, uint _maxClaims) private constant returns (uint) {		
-		uint amount = uint(keccak256(block.timestamp))%(_remainingBalance-min_wei/_maxClaims*2)+min_wei/_maxClaims*2;
+		uint amount = uint(keccak256(now))%(_remainingBalance-min_wei/_maxClaims)+min_wei/_maxClaims;
 		require (amount > 0);
 		require (amount <= _remainingBalance);
 		return amount;
