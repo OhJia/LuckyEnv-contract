@@ -5,8 +5,8 @@ contract LuckyEnvelope {
 	// ------------------------------
   	// config
   	// ------------------------------
-  	uint private default_dev_tip_pct = 0.01;
-  	uint private default_refund_pct = 0.01;
+  	uint private default_dev_tip_pct = 1;
+  	uint private default_refund_pct = 1;
   	uint private min_since_last_claim = 360; // seconds (6 mins)
   	uint private min_wei = 6000000000000000; // 0.006 eth 
   	uint private max_wei = 100000000000000000000; // 100 eth
@@ -44,7 +44,7 @@ contract LuckyEnvelope {
   	uint public envelopeIndex;
   	address public devAddr;
 
-	function LuckyEnvelope(address _devAddr) public {
+	function LuckyEnvelope() public {
 		envelopeIndex = 0;
 		devAddr = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a;
 	}
@@ -80,7 +80,7 @@ contract LuckyEnvelope {
 	// TODO: update last claim check with last block number
 	modifier requireMinSinceLastClaim(uint _id) {
 		if (envelopes[_id].lastClaimTime > 0) {
-			require (now - envelopes[_id].lastClaimTime >= min_since_last_claim * 60);
+			require (now - envelopes[_id].lastClaimTime >= min_since_last_claim);
 		}
 		_;
 	}
@@ -90,7 +90,7 @@ contract LuckyEnvelope {
   	// ------------------------------
 	event EnvelopeCreated(uint _id, address indexed _from, address _temp);
 	event EnvelopeClaimChecked(uint indexed _id, address indexed _from, uint _value);
-	event EnvelopeRefunded(address indexed _from, uint _id, uint _value);
+	event EnvelopeRefunded(uint _id, address indexed _from, uint _value);
 	event withdrewPending(string _type, uint _id, address _from, uint _value);
 
 	// ------------------------------
@@ -103,7 +103,6 @@ contract LuckyEnvelope {
 
 	// create new envelope
 	function newEnvelope(bool _passEnable, string _password, address _tempAddr, string _name, uint _endTime, string _messageLink, uint _maxClaims, uint _feeAmount, bool _devTip) payable public {
-
 		require (msg.value >= min_wei);
 		require (msg.value <= max_wei);
 		require (now < _endTime);
@@ -122,7 +121,7 @@ contract LuckyEnvelope {
 		}
 		env.tempAddr = _tempAddr;
 		if (_devTip) {
-			tipAmount = (amount * default_dev_tip_pct);
+			tipAmount = (amount * default_dev_tip_pct / 100);
 			amount -= tipAmount;
 		}
 		env.creatorAddr = msg.sender;
@@ -136,21 +135,21 @@ contract LuckyEnvelope {
 		env.status = EnvelopeStatus.Created;
 		envelopes[envelopeIndex] = env;
 		pendingWithdrawals[_tempAddr] += _feeAmount;
-		devAddr.transfer(tipAmount);
-
+		
 		EnvelopeCreated(envelopeIndex, msg.sender, _tempAddr);
+		devAddr.transfer(tipAmount);
 	}
 
 	// withdraw: transfer transaction fee to temp addr 
-	function withdrawPendingFee(uint _id, address _address) public {
-        uint amount = pendingWithdrawals[_address];
-        pendingWithdrawals[_address] = 0;
-        withdrawAddr.transfer(amount);
-        withdrewPending("WITHDREW_FEE", _id, _address, amount);
+	function withdrawPendingFee(uint _id, address _tempAddr) public {
+        uint amount = pendingWithdrawals[_tempAddr];
+        pendingWithdrawals[_tempAddr] = 0;
+        withdrewPending("WITHDREW_FEE", _id, _tempAddr, amount);
+        _tempAddr.transfer(amount);
     }
 	
 	// check and update envelope based on claim 
-	function checkClaim(uint _id, _newTempAddr, address _claimerAddr, string _password) public 
+	function checkClaim(uint _id, address _newTempAddr, address _claimerAddr, string _password) public 
 	requireTempAddrMatch(_id, _newTempAddr)
 	notEnded(_id)
 	requireClaimerNotClaimed(_id, _claimerAddr)
@@ -180,8 +179,8 @@ contract LuckyEnvelope {
 	function withdrawPendingClaim(uint _id, address _claimAddr) public {
         uint amount = pendingWithdrawals[_claimAddr];
         pendingWithdrawals[_claimAddr] = 0;
-        withdrawAddr.transfer(amount);
         withdrewPending("WITHDREW_CLAIM", _id, _claimAddr, amount);
+        _claimAddr.transfer(amount);
     }
 
 	// refund envelope when expired
@@ -189,17 +188,17 @@ contract LuckyEnvelope {
 	expired(_id)
 	notEmpty(_id)
 	{
-		uint refundFee = envelopes[_id].remainingBalance * default_refund_pct;
+		uint refundFee = envelopes[_id].remainingBalance * default_refund_pct / 100;
 		uint refundAmount = envelopes[_id].remainingBalance - refundFee;
 		envelopes[_id].remainingBalance = 0;
 		envelopes[_id].status = EnvelopeStatus.Empty;
+		EnvelopeRefunded(_id, envelopes[_id].creatorAddr, refundAmount);
 		envelopes[_id].creatorAddr.transfer(refundAmount);
 		devAddr.transfer(refundFee);
-		EnvelopeRefunded(_id, envelopes[_id].creatorAddr, refundAmount);		
 	}
 
 	// check password 
-	function checkPassword(uint _id, string _password) public returns (bool) {
+	function checkPassword(uint _id, string _password) public view returns (bool) {
 		if (envelopes[_id].hash == keccak256(envelopeIndex, envelopes[_id].creatorAddr, _password)) {
 			return true;
 		} 
