@@ -4,10 +4,11 @@ contract LuckyEnvelope {
 
 	// ------------------------------
   	// config
+  	// TODO: update
   	// ------------------------------
   	uint private default_dev_tip_pct = 1;
   	uint private default_refund_pct = 2;
-  	uint private min_since_last_claim = 360; // seconds (6 mins)
+  	uint private min_since_last_claim = 30; // seconds 
   	uint private min_wei = 6000000000000000; // 0.006 eth 
   	uint private max_wei = 100000000000000000000; // 100 eth
 
@@ -27,7 +28,7 @@ contract LuckyEnvelope {
 		uint endTime;
 		uint initialBalance;
 		uint remainingBalance;
-		uint feeAmount;
+		// uint feeAmount;
 		string messageLink;
 		uint maxClaims;
 		uint totalClaims;
@@ -44,6 +45,7 @@ contract LuckyEnvelope {
   	uint public envelopeIndex;
   	address public devAddr;
 
+  	// TODO: update
 	function LuckyEnvelope() public {
 		envelopeIndex = 0;
 		devAddr = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a;
@@ -77,7 +79,6 @@ contract LuckyEnvelope {
 		_;
 	}
 
-	// TODO: update last claim check with last block number
 	modifier requireMinSinceLastClaim(uint _id) {
 		if (envelopes[_id].lastClaimTime > 0) {
 			require (now - envelopes[_id].lastClaimTime >= min_since_last_claim);
@@ -85,13 +86,18 @@ contract LuckyEnvelope {
 		_;
 	}
 
+	modifier pendingWithdraw(address _address) {
+		require (pendingWithdrawals[_address] > 0);
+		_;
+	}
+
 	// ------------------------------
   	// events
   	// ------------------------------
-	event EnvelopeCreated(uint _id, address indexed _from, address _temp);
+	event EnvelopeCreated(uint _id, address indexed _from);
 	event EnvelopeClaimChecked(uint indexed _id, address indexed _from, uint _value);
 	event EnvelopeRefunded(uint _id, address indexed _from, uint _value);
-	event withdrewPending(string _type, uint _id, address _from, uint _value);
+	event withdrewPending(uint _id, address _from, uint _value);
 
 	// ------------------------------
   	// main functions
@@ -129,24 +135,16 @@ contract LuckyEnvelope {
 		env.endTime = _endTime;
 		env.initialBalance = amount - _feeAmount;
 		env.remainingBalance = env.initialBalance;
-		env.feeAmount = _feeAmount;
+		// env.feeAmount = _feeAmount;
 		env.messageLink = _messageLink;
 		env.maxClaims = _maxClaims;
 		env.status = EnvelopeStatus.Created;
 		envelopes[envelopeIndex] = env;
 		pendingWithdrawals[_tempAddr] += _feeAmount;
 		
-		EnvelopeCreated(envelopeIndex, msg.sender, _tempAddr);
+		EnvelopeCreated(envelopeIndex, msg.sender);
 		devAddr.transfer(tipAmount);
 	}
-
-	// withdraw: transfer transaction fee to temp addr 
-	function withdrawPendingFee(uint _id, address _tempAddr) public {
-        uint amount = pendingWithdrawals[_tempAddr];
-        pendingWithdrawals[_tempAddr] = 0;
-        withdrewPending("WITHDREW_FEE", _id, _tempAddr, amount);
-        _tempAddr.transfer(amount);
-    }
 	
 	// check and update envelope based on claim 
 	function checkClaim(uint _id, address _newTempAddr, address _claimerAddr, string _password) public 
@@ -160,7 +158,7 @@ contract LuckyEnvelope {
 		}		
 		uint claimAmount = envelopes[_id].remainingBalance;
 		if (envelopes[_id].maxClaims - envelopes[_id].totalClaims > 1) {
-			claimAmount = generateClaimAmount(envelopes[_id].remainingBalance, envelopes[_id].maxClaims);
+			claimAmount = generateClaimAmount(envelopes[_id].remainingBalance, (envelopes[_id].maxClaims - 1));
 		} 
 		envelopes[_id].totalClaims += 1;
 		envelopes[_id].claims[_claimerAddr] = claimAmount;
@@ -175,14 +173,6 @@ contract LuckyEnvelope {
 		EnvelopeClaimChecked(_id, _claimerAddr, claimAmount);		
 	}
 
-	// claimer addr withdraw claim amount
-	function withdrawPendingClaim(uint _id, address _claimAddr) public {
-        uint amount = pendingWithdrawals[_claimAddr];
-        pendingWithdrawals[_claimAddr] = 0;
-        withdrewPending("WITHDREW_CLAIM", _id, _claimAddr, amount);
-        _claimAddr.transfer(amount);
-    }
-
 	// refund envelope when expired
 	function refundEnvelope(uint _id) public 
 	expired(_id)
@@ -196,6 +186,17 @@ contract LuckyEnvelope {
 		envelopes[_id].creatorAddr.transfer(refundAmount);
 		devAddr.transfer(refundFee);
 	}
+
+	// withdraw: transfer transaction fee to temp addr 
+	// or claim amount to claimer addr
+	function withdrawPending(uint _id, address _address) 
+	pendingWithdraw(_address)
+	public {
+        uint amount = pendingWithdrawals[_address];
+        pendingWithdrawals[_address] = 0;
+        withdrewPending(_id, _address, amount);
+        _address.transfer(amount);
+    }
 
 	// check password 
 	function checkPassword(uint _id, string _password) public view returns (bool) {
@@ -228,11 +229,10 @@ contract LuckyEnvelope {
 	}
 
 	// helper
-	function generateClaimAmount(uint _remainingBalance, uint _maxClaims) private constant returns (uint) {		
-		uint amount = uint(keccak256(now))%(_remainingBalance-min_wei/_maxClaims)+min_wei/_maxClaims;
+	function generateClaimAmount(uint _remain, uint _portion) private constant returns (uint) {	
+		uint amount = uint(block.blockhash(block.number-1)) % (_remain / _portion) + (_remain / _portion * 10 / 100);
 		require (amount > 0);
-		require (amount <= _remainingBalance);
+		require (amount <= _remain);
 		return amount;
 	}
-
 }

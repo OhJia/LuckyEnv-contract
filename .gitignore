@@ -3,3 +3,4 @@ node_modules
 yarn-error.log
 contract-v-address.txt
 contract-interface.txt
+contract-gas.txt
