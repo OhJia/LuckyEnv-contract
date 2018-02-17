@@ -11,7 +11,7 @@ contract LuckyEnvelope {
   	uint private min_since_last_claim = 360; // seconds 
   	uint private min_wei = 6000000000000000; // 0.006 eth 
   	uint private max_wei = 100000000000000000000; // 100 eth
-  	uint max_transaction_fee = 60000000000000000 // 0.06 eth
+  	uint max_transaction_fee = 60000000000000000; // 0.06 eth
 
 	// ------------------------------
   	// object struct & mappings
