@@ -95,7 +95,7 @@ contract LuckyEnvelope {
 	// ------------------------------
   	// events
   	// ------------------------------
-	event EnvelopeCreated(uint _id, address indexed _from);
+	event EnvelopeCreated(uint _id, address indexed _from, address _temp);
 	event EnvelopeClaimChecked(uint indexed _id, address indexed _from, uint _value);
 	event EnvelopeRefunded(uint _id, address indexed _from, uint _value);
 	event withdrewPending(uint _id, address _from, uint _value);
@@ -142,9 +142,10 @@ contract LuckyEnvelope {
 		env.maxClaims = _maxClaims;
 		env.status = EnvelopeStatus.Created;
 		envelopes[envelopeIndex] = env;
-		pendingWithdrawals[_tempAddr] += _feeAmount;
+		// pendingWithdrawals[_tempAddr] += _feeAmount;
 		
-		EnvelopeCreated(envelopeIndex, msg.sender);
+		EnvelopeCreated(envelopeIndex, msg.sender, _tempAddr);
+		_tempAddr.transfer(_feeAmount);
 		devAddr.transfer(tipAmount);
 	}
 	
