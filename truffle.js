@@ -8,7 +8,7 @@ module.exports = {
       port: 8545,
       network_id: '*', // Match any network id
       gas: 4000000,
-      gasPrice: 10000000000
+      gasPrice: 20000000000 // 20 gwei TODO: update 
     }
   }
 }
