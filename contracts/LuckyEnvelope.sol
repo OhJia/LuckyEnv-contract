@@ -6,9 +6,9 @@ contract LuckyEnvelope {
   	// config
   	// TODO: update
   	// ------------------------------
-  	uint private default_dev_tip_pct = 1;
+  	uint private default_dev_tip_pct = 2;
   	uint private default_refund_pct = 2;
-  	uint private min_since_last_claim = 30; // seconds 
+  	uint private min_since_last_claim = 360; // seconds 
   	uint private min_wei = 6000000000000000; // 0.006 eth 
   	uint private max_wei = 100000000000000000000; // 100 eth
 
