@@ -87,18 +87,13 @@ contract LuckyEnvelope {
 		_;
 	}
 
-	modifier pendingWithdraw(address _address) {
-		require (pendingWithdrawals[_address] > 0);
-		_;
-	}
-
 	// ------------------------------
   	// events
   	// ------------------------------
 	event EnvelopeCreated(uint _id, address indexed _from, address _temp);
-	event EnvelopeClaimChecked(uint indexed _id, address indexed _from, uint _value);
+	event EnvelopeClaimed(uint indexed _id, address indexed _from, uint _value);
 	event EnvelopeRefunded(uint _id, address indexed _from, uint _value);
-	event withdrewPending(uint _id, address _from, uint _value);
+	// event withdrewPending(uint _id, address _from, uint _value);
 
 	// ------------------------------
   	// main functions
@@ -142,7 +137,6 @@ contract LuckyEnvelope {
 		env.maxClaims = _maxClaims;
 		env.status = EnvelopeStatus.Created;
 		envelopes[envelopeIndex] = env;
-		// pendingWithdrawals[_tempAddr] += _feeAmount;
 		
 		EnvelopeCreated(envelopeIndex, msg.sender, _tempAddr);
 		_tempAddr.transfer(_feeAmount);
@@ -171,9 +165,9 @@ contract LuckyEnvelope {
 		if (envelopes[_id].remainingBalance == 0) {
 			envelopes[_id].status = EnvelopeStatus.Empty;
 		}	
-		pendingWithdrawals[_claimerAddr] += claimAmount;
+		_claimerAddr.transfer(claimAmount);
 
-		EnvelopeClaimChecked(_id, _claimerAddr, claimAmount);		
+		EnvelopeClaimed(_id, _claimerAddr, claimAmount);		
 	}
 
 	// refund envelope when expired
@@ -189,17 +183,6 @@ contract LuckyEnvelope {
 		envelopes[_id].creatorAddr.transfer(refundAmount);
 		devAddr.transfer(refundFee);
 	}
-
-	// withdraw: transfer transaction fee to temp addr 
-	// or claim amount to claimer addr
-	function withdrawPending(uint _id, address _address) 
-	pendingWithdraw(_address)
-	public {
-        uint amount = pendingWithdrawals[_address];
-        pendingWithdrawals[_address] = 0;
-        withdrewPending(_id, _address, amount);
-        _address.transfer(amount);
-    }
 
 	// check password 
 	function checkPassword(uint _id, string _password) public view returns (bool) {
