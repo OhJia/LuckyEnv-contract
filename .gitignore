@@ -1,6 +1,7 @@
 build
 node_modules
 yarn-error.log
+.env
 contract-v-address.txt
 contract-interface.txt
 contract-gas.txt

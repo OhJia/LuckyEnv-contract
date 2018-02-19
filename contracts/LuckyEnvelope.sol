@@ -11,10 +11,10 @@ contract LuckyEnvelope {
   	uint private min_since_last_claim = 360; // seconds 
   	uint private min_wei = 6000000000000000; // 0.006 eth 
   	uint private max_wei = 100000000000000000000; // 100 eth
-  	uint max_transaction_fee = 60000000000000000; // 0.06 eth
+  	uint private max_transaction_fee = 1000000000000000000; // 1 eth
 
 	// ------------------------------
-  	// object struct & mappings
+  	// envelope struct & mappings
   	// ------------------------------
   	enum EnvelopeStatus { Created, Claimed, Empty }
 
@@ -29,7 +29,6 @@ contract LuckyEnvelope {
 		uint endTime;
 		uint initialBalance;
 		uint remainingBalance;
-		// uint feeAmount;
 		string messageLink;
 		uint maxClaims;
 		uint totalClaims;
@@ -50,7 +49,7 @@ contract LuckyEnvelope {
 	function LuckyEnvelope() public {
 		envelopeIndex = 0;
 		devAddr = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a;
-	}
+	} 
 
 	// ------------------------------
   	// modifiers
@@ -132,7 +131,6 @@ contract LuckyEnvelope {
 		env.endTime = _endTime;
 		env.initialBalance = amount - _feeAmount;
 		env.remainingBalance = env.initialBalance;
-		// env.feeAmount = _feeAmount;
 		env.messageLink = _messageLink;
 		env.maxClaims = _maxClaims;
 		env.status = EnvelopeStatus.Created;
@@ -144,7 +142,7 @@ contract LuckyEnvelope {
 	}
 	
 	// check and update envelope based on claim 
-	function checkClaim(uint _id, address _newTempAddr, address _claimerAddr, string _password) public 
+	function claimEnvelope(uint _id, address _newTempAddr, address _claimerAddr, string _password) public 
 	requireTempAddrMatch(_id, _newTempAddr)
 	notEnded(_id)
 	requireClaimerNotClaimed(_id, _claimerAddr)
@@ -165,9 +163,8 @@ contract LuckyEnvelope {
 		if (envelopes[_id].remainingBalance == 0) {
 			envelopes[_id].status = EnvelopeStatus.Empty;
 		}	
-		_claimerAddr.transfer(claimAmount);
-
-		EnvelopeClaimed(_id, _claimerAddr, claimAmount);		
+		EnvelopeClaimed(_id, _claimerAddr, claimAmount);	
+		_claimerAddr.transfer(claimAmount);	
 	}
 
 	// refund envelope when expired
