@@ -37,7 +37,6 @@ contract LuckyEnvelope {
 	}
 
 	mapping (uint => Envelope) private envelopes;
-	mapping (address => uint) pendingWithdrawals; // withdraw pattern
 
 	// ------------------------------
   	// constructor 
