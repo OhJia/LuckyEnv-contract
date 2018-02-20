@@ -91,7 +91,6 @@ contract LuckyEnvelope {
 	event EnvelopeCreated(uint _id, address indexed _from, address _temp);
 	event EnvelopeClaimed(uint indexed _id, address indexed _from, uint _value);
 	event EnvelopeRefunded(uint _id, address indexed _from, uint _value);
-	// event withdrewPending(uint _id, address _from, uint _value);
 
 	// ------------------------------
   	// main functions
