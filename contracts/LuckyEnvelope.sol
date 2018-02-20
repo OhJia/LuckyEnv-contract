@@ -47,7 +47,7 @@ contract LuckyEnvelope {
   	// TODO: update
 	function LuckyEnvelope() public {
 		envelopeIndex = 0;
-		devAddr = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a;
+		devAddr = 0xb9701545E7bf1c75f949C01DB12c0e23aADA752a; 
 	} 
 
 	// ------------------------------
