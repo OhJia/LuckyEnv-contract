@@ -181,7 +181,7 @@ contract LuckyEnvelope {
 
 	// check password 
 	function checkPassword(uint _id, string _password) public view returns (bool) {
-		if (envelopes[_id].hash == keccak256(envelopeIndex, envelopes[_id].creatorAddr, _password)) {
+		if (envelopes[_id].hash == keccak256(_id, envelopes[_id].creatorAddr, _password)) {
 			return true;
 		} 
 		return false;
